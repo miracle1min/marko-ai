@@ -1,0 +1,1515 @@
+import React, { useState, useEffect } from "react";
+import { 
+  FileText, FileDown, ClipboardCopy, CheckCheck, 
+  AlertCircle, ArrowRight, RefreshCcw, Pencil, PlusCircle,
+  Trash2, File, Settings, HelpCircle, Search, Sparkles,
+  Wand2
+} from "lucide-react";
+import { generateContract, enhanceContract } from "@/lib/geminiApi";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import Breadcrumb from "@/components/Breadcrumb";
+import { jsPDF } from "jspdf";
+
+// Contract Templates
+interface ContractClause {
+  id: string;
+  title: string;
+  content: string;
+  isRequired?: boolean;
+}
+
+interface ContractTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  clauses: ContractClause[];
+  placeholders: string[];
+}
+
+// Default Contract Templates
+const contractTemplates: ContractTemplate[] = [
+  {
+    id: "employment-agreement",
+    name: "Perjanjian Kerja",
+    description: "Perjanjian antara perusahaan dan karyawan",
+    category: "employment",
+    clauses: [
+      {
+        id: "parties",
+        title: "Para Pihak",
+        content: "PERJANJIAN KERJA ini dibuat pada [TANGGAL] oleh dan antara:\n\n1. [NAMA_PERUSAHAAN], sebuah perusahaan yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PERUSAHAAN], dalam hal ini diwakili oleh [NAMA_PERWAKILAN] selaku [JABATAN] (selanjutnya disebut sebagai \"Perusahaan\"); dan\n\n2. [NAMA_KARYAWAN], Warga Negara Indonesia, pemegang KTP nomor [NOMOR_KTP], beralamat di [ALAMAT_KARYAWAN] (selanjutnya disebut sebagai \"Karyawan\").\n\nPerusahaan dan Karyawan selanjutnya secara bersama-sama disebut sebagai \"Para Pihak\".",
+        isRequired: true
+      },
+      {
+        id: "employment-terms",
+        title: "Ketentuan Kerja",
+        content: "1. Perusahaan dengan ini mempekerjakan Karyawan sebagai [POSISI] dan Karyawan dengan ini menerima penunjukan tersebut.\n\n2. Masa kerja akan dimulai pada tanggal [TANGGAL_MULAI] dan akan berlanjut hingga diakhiri sesuai dengan ketentuan dalam perjanjian ini.\n\n3. Karyawan akan bekerja di [LOKASI_KERJA] selama jam kerja normal Perusahaan, yaitu [JAM_KERJA], [HARI_KERJA] setiap minggu.",
+        isRequired: true
+      },
+      {
+        id: "compensation",
+        title: "Kompensasi dan Tunjangan",
+        content: "1. Perusahaan akan membayar Karyawan gaji pokok sebesar Rp [GAJI_BULANAN] per bulan, dibayarkan pada tanggal [TANGGAL_GAJI] setiap bulan melalui transfer bank ke rekening Karyawan.\n\n2. Selain gaji pokok, Karyawan berhak atas tunjangan sebagai berikut:\n   a. Tunjangan Transportasi: Rp [TUNJANGAN_TRANSPORTASI] per bulan\n   b. Tunjangan Makan: Rp [TUNJANGAN_MAKAN] per bulan\n   c. [TUNJANGAN_LAINNYA]\n\n3. Karyawan akan terdaftar dalam program BPJS Ketenagakerjaan dan BPJS Kesehatan sesuai dengan peraturan yang berlaku.",
+        isRequired: true
+      },
+      {
+        id: "duties-responsibilities",
+        title: "Tugas dan Tanggung Jawab",
+        content: "1. Karyawan berjanji untuk melakukan yang terbaik dalam melaksanakan tugas-tugas yang dibebankan kepadanya oleh Perusahaan.\n\n2. Tugas dan tanggung jawab utama Karyawan adalah sebagai berikut:\n   a. [TUGAS_1]\n   b. [TUGAS_2]\n   c. [TUGAS_3]\n   d. [TUGAS_LAINNYA]\n\n3. Karyawan harus mematuhi semua kebijakan, prosedur, dan peraturan Perusahaan yang berlaku saat ini dan yang mungkin diubah dari waktu ke waktu.",
+        isRequired: true
+      },
+      {
+        id: "confidentiality",
+        title: "Kerahasiaan",
+        content: "1. Karyawan mengakui bahwa selama masa kerjanya, Karyawan akan memiliki akses ke informasi rahasia Perusahaan, termasuk namun tidak terbatas pada rahasia dagang, daftar pelanggan, strategi bisnis, dan informasi teknis (\"Informasi Rahasia\").\n\n2. Karyawan setuju untuk menjaga kerahasiaan Informasi Rahasia dan tidak akan mengungkapkan, menyebarkan, atau menggunakan Informasi Rahasia untuk tujuan apa pun selain untuk kepentingan Perusahaan.\n\n3. Kewajiban kerahasiaan ini akan tetap berlaku setelah pengakhiran perjanjian kerja ini untuk jangka waktu [MASA_KERAHASIAAN] tahun.",
+        isRequired: true
+      },
+      {
+        id: "termination",
+        title: "Pengakhiran Perjanjian",
+        content: "1. Perusahaan atau Karyawan dapat mengakhiri perjanjian kerja ini dengan memberikan pemberitahuan tertulis minimal [MASA_PEMBERITAHUAN] hari sebelumnya.\n\n2. Perusahaan dapat mengakhiri perjanjian kerja ini tanpa pemberitahuan jika Karyawan melakukan pelanggaran berat terhadap kebijakan Perusahaan atau ketentuan dalam perjanjian ini.\n\n3. Pada saat pengakhiran, Karyawan harus mengembalikan semua properti Perusahaan yang berada dalam kepemilikan atau kendali Karyawan.",
+        isRequired: true
+      },
+      {
+        id: "dispute-resolution",
+        title: "Penyelesaian Sengketa",
+        content: "1. Setiap perselisihan yang timbul dari atau sehubungan dengan perjanjian ini akan diselesaikan secara musyawarah untuk mufakat.\n\n2. Jika perselisihan tidak dapat diselesaikan secara musyawarah dalam waktu [MASA_MUSYAWARAH] hari, maka perselisihan akan diselesaikan melalui [METODE_PENYELESAIAN_SENGKETA].",
+        isRequired: true
+      },
+      {
+        id: "governing-law",
+        title: "Hukum yang Berlaku",
+        content: "Perjanjian ini diatur oleh dan ditafsirkan sesuai dengan hukum Republik Indonesia.",
+        isRequired: true
+      },
+      {
+        id: "probation",
+        title: "Masa Percobaan",
+        content: "1. Karyawan akan menjalani masa percobaan selama [MASA_PERCOBAAN] bulan sejak tanggal mulai kerja.\n\n2. Selama masa percobaan, Perusahaan dapat mengakhiri perjanjian kerja ini tanpa pemberitahuan dan tanpa kompensasi pemutusan hubungan kerja.",
+        isRequired: false
+      },
+      {
+        id: "intellectual-property",
+        title: "Hak Kekayaan Intelektual",
+        content: "1. Karyawan mengakui bahwa semua karya, penemuan, ide, dan materi lain yang dibuat atau dikembangkan oleh Karyawan selama masa kerjanya dengan Perusahaan (\"Karya\") adalah milik Perusahaan.\n\n2. Karyawan dengan ini mengalihkan kepada Perusahaan semua hak, kepemilikan, dan kepentingan dalam dan atas Karya tersebut, termasuk namun tidak terbatas pada hak cipta, paten, dan hak kekayaan intelektual lainnya.",
+        isRequired: false
+      },
+      {
+        id: "non-compete",
+        title: "Larangan Bersaing",
+        content: "Selama jangka waktu [MASA_NON_COMPETE] bulan setelah pengakhiran perjanjian kerja ini, Karyawan tidak akan, secara langsung atau tidak langsung, terlibat dalam bisnis yang bersaing dengan bisnis Perusahaan dalam [WILAYAH_NON_COMPETE].",
+        isRequired: false
+      }
+    ],
+    placeholders: [
+      "TANGGAL", "NAMA_PERUSAHAAN", "ALAMAT_PERUSAHAAN", "NAMA_PERWAKILAN", "JABATAN", "NAMA_KARYAWAN", "NOMOR_KTP", "ALAMAT_KARYAWAN", "POSISI", "TANGGAL_MULAI", "LOKASI_KERJA", "JAM_KERJA", "HARI_KERJA", "GAJI_BULANAN", "TANGGAL_GAJI", "TUNJANGAN_TRANSPORTASI", "TUNJANGAN_MAKAN", "TUNJANGAN_LAINNYA", "TUGAS_1", "TUGAS_2", "TUGAS_3", "TUGAS_LAINNYA", "MASA_KERAHASIAAN", "MASA_PEMBERITAHUAN", "MASA_MUSYAWARAH", "METODE_PENYELESAIAN_SENGKETA", "MASA_PERCOBAAN", "MASA_NON_COMPETE", "WILAYAH_NON_COMPETE"
+    ]
+  },
+  {
+    id: "rental-agreement",
+    name: "Perjanjian Sewa Properti",
+    description: "Perjanjian sewa properti antara pemilik dan penyewa",
+    category: "property",
+    clauses: [
+      {
+        id: "parties",
+        title: "Para Pihak",
+        content: "PERJANJIAN SEWA ini dibuat pada [TANGGAL] oleh dan antara:\n\n1. [NAMA_PEMILIK], Warga Negara Indonesia, pemegang KTP nomor [NOMOR_KTP_PEMILIK], beralamat di [ALAMAT_PEMILIK] (selanjutnya disebut sebagai \"Pemilik\"); dan\n\n2. [NAMA_PENYEWA], Warga Negara Indonesia, pemegang KTP nomor [NOMOR_KTP_PENYEWA], beralamat di [ALAMAT_PENYEWA] (selanjutnya disebut sebagai \"Penyewa\").\n\nPemilik dan Penyewa selanjutnya secara bersama-sama disebut sebagai \"Para Pihak\".",
+        isRequired: true
+      },
+      {
+        id: "property-details",
+        title: "Detail Properti",
+        content: "Pemilik dengan ini menyewakan kepada Penyewa properti yang terletak di [ALAMAT_PROPERTI], dengan rincian sebagai berikut:\n\n1. Jenis Properti: [JENIS_PROPERTI]\n2. Luas Bangunan: [LUAS_BANGUNAN] m²\n3. Luas Tanah: [LUAS_TANAH] m²\n4. Jumlah Kamar: [JUMLAH_KAMAR]\n5. Fasilitas: [FASILITAS_PROPERTI]\n\n(selanjutnya disebut sebagai \"Properti\")",
+        isRequired: true
+      },
+      {
+        id: "term",
+        title: "Jangka Waktu Sewa",
+        content: "1. Jangka waktu sewa adalah selama [JANGKA_WAKTU] bulan, terhitung sejak tanggal [TANGGAL_MULAI_SEWA] hingga [TANGGAL_AKHIR_SEWA].\n\n2. Perjanjian ini dapat diperpanjang dengan kesepakatan tertulis dari Para Pihak paling lambat [MASA_PEMBERITAHUAN_PERPANJANGAN] hari sebelum berakhirnya jangka waktu sewa.",
+        isRequired: true
+      },
+      {
+        id: "rent-payment",
+        title: "Pembayaran Sewa",
+        content: "1. Biaya sewa adalah sebesar Rp [BIAYA_SEWA] per bulan, dibayarkan di muka setiap tanggal [TANGGAL_PEMBAYARAN_SEWA] setiap bulannya.\n\n2. Pembayaran dilakukan melalui transfer bank ke rekening Pemilik:\n   Nama Bank: [BANK_PEMILIK]\n   Nomor Rekening: [NOMOR_REKENING_PEMILIK]\n   Atas Nama: [NAMA_REKENING_PEMILIK]\n\n3. Keterlambatan pembayaran akan dikenakan denda sebesar [PERSENTASE_DENDA]% dari jumlah biaya sewa per hari.",
+        isRequired: true
+      },
+      {
+        id: "security-deposit",
+        title: "Uang Jaminan",
+        content: "1. Penyewa setuju untuk membayar uang jaminan sebesar Rp [JUMLAH_UANG_JAMINAN] pada saat penandatanganan perjanjian ini.\n\n2. Uang jaminan akan dikembalikan kepada Penyewa dalam waktu [WAKTU_PENGEMBALIAN_JAMINAN] hari setelah berakhirnya perjanjian sewa, dengan pengurangan untuk biaya perbaikan kerusakan (jika ada) yang disebabkan oleh Penyewa selain kerusakan akibat penggunaan normal.",
+        isRequired: true
+      },
+      {
+        id: "obligations-owner",
+        title: "Kewajiban Pemilik",
+        content: "1. Pemilik bertanggung jawab untuk memastikan bahwa Properti dalam kondisi layak huni pada saat dimulainya perjanjian sewa.\n\n2. Pemilik akan bertanggung jawab atas perbaikan struktural Properti dan pemeliharaan fasilitas umum.\n\n3. Pemilik akan membayar pajak properti dan biaya lain yang terkait dengan kepemilikan Properti.",
+        isRequired: true
+      },
+      {
+        id: "obligations-tenant",
+        title: "Kewajiban Penyewa",
+        content: "1. Penyewa akan menggunakan Properti dengan baik dan hanya untuk tujuan [TUJUAN_PENGGUNAAN].\n\n2. Penyewa akan membayar biaya utilitas termasuk namun tidak terbatas pada listrik, air, telepon, internet, dan gas yang digunakan selama masa sewa.\n\n3. Penyewa akan memelihara Properti dalam kondisi baik dan bersih serta bertanggung jawab atas perbaikan minor.\n\n4. Penyewa tidak akan melakukan perubahan struktural pada Properti tanpa persetujuan tertulis dari Pemilik.",
+        isRequired: true
+      },
+      {
+        id: "termination",
+        title: "Pengakhiran Perjanjian",
+        content: "1. Perjanjian ini dapat diakhiri oleh Pemilik jika Penyewa melanggar ketentuan dalam perjanjian ini dan tidak memperbaiki pelanggaran tersebut dalam waktu [MASA_PERBAIKAN_PELANGGARAN] hari setelah menerima pemberitahuan tertulis.\n\n2. Penyewa dapat mengakhiri perjanjian ini sebelum jangka waktu berakhir dengan memberikan pemberitahuan tertulis kepada Pemilik minimal [MASA_PEMBERITAHUAN_PENGAKHIRAN] hari sebelumnya dan membayar denda sebesar [DENDA_PENGAKHIRAN_DINI].",
+        isRequired: true
+      },
+      {
+        id: "inspection",
+        title: "Inspeksi dan Inventaris",
+        content: "1. Pada saat dimulainya perjanjian sewa, Para Pihak akan melakukan inspeksi bersama dan membuat daftar inventaris properti yang akan dilampirkan pada perjanjian ini.\n\n2. Pemilik berhak melakukan inspeksi Properti dengan pemberitahuan tertulis terlebih dahulu minimal [MASA_PEMBERITAHUAN_INSPEKSI] hari, kecuali dalam keadaan darurat.",
+        isRequired: false
+      },
+      {
+        id: "sublease",
+        title: "Larangan Penyewaan Kembali",
+        content: "Penyewa tidak diperbolehkan menyewakan kembali atau mengalihkan hak sewa atas Properti kepada pihak lain tanpa persetujuan tertulis dari Pemilik.",
+        isRequired: false
+      },
+      {
+        id: "insurance",
+        title: "Asuransi",
+        content: "1. Pemilik akan mengasuransikan Properti terhadap kerusakan struktural, kebakaran, dan bencana alam.\n\n2. Penyewa disarankan untuk mengasuransikan barang-barang pribadinya yang berada di dalam Properti.",
+        isRequired: false
+      },
+      {
+        id: "dispute-resolution",
+        title: "Penyelesaian Sengketa",
+        content: "Setiap perselisihan yang timbul dari atau sehubungan dengan perjanjian ini akan diselesaikan secara musyawarah untuk mufakat. Jika tidak tercapai kesepakatan, maka perselisihan akan diselesaikan melalui [FORUM_PENYELESAIAN_SENGKETA].",
+        isRequired: true
+      },
+      {
+        id: "governing-law",
+        title: "Hukum yang Berlaku",
+        content: "Perjanjian ini diatur oleh dan ditafsirkan sesuai dengan hukum Republik Indonesia.",
+        isRequired: true
+      }
+    ],
+    placeholders: [
+      "TANGGAL", "NAMA_PEMILIK", "NOMOR_KTP_PEMILIK", "ALAMAT_PEMILIK", "NAMA_PENYEWA", "NOMOR_KTP_PENYEWA", "ALAMAT_PENYEWA", "ALAMAT_PROPERTI", "JENIS_PROPERTI", "LUAS_BANGUNAN", "LUAS_TANAH", "JUMLAH_KAMAR", "FASILITAS_PROPERTI", "JANGKA_WAKTU", "TANGGAL_MULAI_SEWA", "TANGGAL_AKHIR_SEWA", "MASA_PEMBERITAHUAN_PERPANJANGAN", "BIAYA_SEWA", "TANGGAL_PEMBAYARAN_SEWA", "BANK_PEMILIK", "NOMOR_REKENING_PEMILIK", "NAMA_REKENING_PEMILIK", "PERSENTASE_DENDA", "JUMLAH_UANG_JAMINAN", "WAKTU_PENGEMBALIAN_JAMINAN", "TUJUAN_PENGGUNAAN", "MASA_PERBAIKAN_PELANGGARAN", "MASA_PEMBERITAHUAN_PENGAKHIRAN", "DENDA_PENGAKHIRAN_DINI", "MASA_PEMBERITAHUAN_INSPEKSI", "FORUM_PENYELESAIAN_SENGKETA"
+    ]
+  },
+  {
+    id: "service-agreement",
+    name: "Perjanjian Jasa",
+    description: "Perjanjian antara penyedia jasa dan klien",
+    category: "business",
+    clauses: [
+      {
+        id: "parties",
+        title: "Para Pihak",
+        content: "PERJANJIAN JASA ini dibuat pada [TANGGAL] oleh dan antara:\n\n1. [NAMA_PENYEDIA], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PENYEDIA], dalam hal ini diwakili oleh [NAMA_PERWAKILAN] selaku [JABATAN] (selanjutnya disebut sebagai \"Penyedia Jasa\"); dan\n\n2. [NAMA_KLIEN], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_KLIEN], dalam hal ini diwakili oleh [NAMA_PERWAKILAN_KLIEN] selaku [JABATAN_KLIEN] (selanjutnya disebut sebagai \"Klien\").\n\nPenyedia Jasa dan Klien selanjutnya secara bersama-sama disebut sebagai \"Para Pihak\".",
+        isRequired: true
+      },
+      {
+        id: "services",
+        title: "Ruang Lingkup Jasa",
+        content: "1. Penyedia Jasa setuju untuk menyediakan jasa berikut kepada Klien (\"Jasa\"):\n   a. [DESKRIPSI_JASA_1]\n   b. [DESKRIPSI_JASA_2]\n   c. [DESKRIPSI_JASA_3]\n   d. [DESKRIPSI_JASA_LAINNYA]\n\n2. Detail lengkap tentang Jasa tercantum dalam Lampiran A yang merupakan bagian yang tidak terpisahkan dari perjanjian ini.",
+        isRequired: true
+      },
+      {
+        id: "term",
+        title: "Jangka Waktu Perjanjian",
+        content: "1. Perjanjian ini berlaku efektif sejak tanggal [TANGGAL_EFEKTIF] dan akan terus berlaku hingga [TANGGAL_BERAKHIR], kecuali diakhiri lebih awal sesuai dengan ketentuan dalam perjanjian ini.\n\n2. Perjanjian ini dapat diperpanjang dengan kesepakatan tertulis dari Para Pihak.",
+        isRequired: true
+      },
+      {
+        id: "compensation",
+        title: "Biaya dan Pembayaran",
+        content: "1. Sebagai imbalan atas Jasa yang disediakan, Klien setuju untuk membayar kepada Penyedia Jasa biaya sebesar Rp [JUMLAH_BIAYA] (\"Biaya Jasa\").\n\n2. Jadwal pembayaran adalah sebagai berikut:\n   a. [JADWAL_PEMBAYARAN_1]: Rp [JUMLAH_1]\n   b. [JADWAL_PEMBAYARAN_2]: Rp [JUMLAH_2]\n   c. [JADWAL_PEMBAYARAN_LAINNYA]\n\n3. Pembayaran akan dilakukan melalui transfer bank ke rekening Penyedia Jasa:\n   Nama Bank: [BANK_PENYEDIA]\n   Nomor Rekening: [NOMOR_REKENING_PENYEDIA]\n   Atas Nama: [NAMA_REKENING_PENYEDIA]\n\n4. Keterlambatan pembayaran akan dikenakan denda sebesar [PERSENTASE_DENDA]% dari jumlah yang terutang per hari.",
+        isRequired: true
+      },
+      {
+        id: "obligations-provider",
+        title: "Kewajiban Penyedia Jasa",
+        content: "1. Penyedia Jasa akan melaksanakan Jasa dengan keahlian, kehati-hatian, dan ketekunan yang wajar sesuai dengan standar industri yang berlaku.\n\n2. Penyedia Jasa akan mematuhi semua petunjuk dan persyaratan yang wajar dari Klien terkait dengan pelaksanaan Jasa.\n\n3. Penyedia Jasa akan menunjuk [NAMA_MANAJER_PROYEK] sebagai manajer proyek yang bertanggung jawab atas pelaksanaan Jasa dan komunikasi dengan Klien.",
+        isRequired: true
+      },
+      {
+        id: "obligations-client",
+        title: "Kewajiban Klien",
+        content: "1. Klien akan memberikan kepada Penyedia Jasa akses yang wajar ke personel, informasi, dan fasilitas Klien yang diperlukan untuk pelaksanaan Jasa.\n\n2. Klien akan memberikan umpan balik dan persetujuan yang tepat waktu atas permintaan Penyedia Jasa.\n\n3. Klien akan menunjuk [NAMA_PERWAKILAN_KLIEN_PROYEK] sebagai penghubung utama untuk proyek ini.",
+        isRequired: true
+      },
+      {
+        id: "intellectual-property",
+        title: "Hak Kekayaan Intelektual",
+        content: "1. Semua materi yang sudah ada sebelumnya, termasuk namun tidak terbatas pada metodologi, perangkat lunak, dan pengetahuan yang digunakan oleh Penyedia Jasa dalam memberikan Jasa (\"Material Pra-Existing\") tetap menjadi hak milik Penyedia Jasa.\n\n2. Penyedia Jasa dengan ini memberikan kepada Klien lisensi non-eksklusif, tidak dapat dialihkan, dan bebas royalti untuk menggunakan Material Pra-Existing sejauh diperlukan untuk memanfaatkan hasil Jasa.\n\n3. Semua hak kekayaan intelektual dalam hasil kerja yang dikembangkan khusus untuk Klien sebagai bagian dari Jasa (\"Hasil Kerja\") akan menjadi milik Klien setelah pembayaran penuh Biaya Jasa.",
+        isRequired: true
+      },
+      {
+        id: "confidentiality",
+        title: "Kerahasiaan",
+        content: "1. Para Pihak setuju untuk menjaga kerahasiaan semua informasi rahasia yang diterima dari pihak lain sehubungan dengan perjanjian ini.\n\n2. Kewajiban kerahasiaan ini berlaku selama jangka waktu perjanjian dan [MASA_KERAHASIAAN] tahun setelah pengakhiran atau berakhirnya perjanjian ini.\n\n3. Informasi tidak akan dianggap rahasia jika: (a) sudah diketahui umum; (b) diterima dari pihak ketiga tanpa kewajiban kerahasiaan; atau (c) pengungkapan diwajibkan oleh hukum.",
+        isRequired: true
+      },
+      {
+        id: "termination",
+        title: "Pengakhiran Perjanjian",
+        content: "1. Salah satu pihak dapat mengakhiri perjanjian ini dengan memberikan pemberitahuan tertulis kepada pihak lain jika pihak lain melakukan pelanggaran material terhadap perjanjian ini dan tidak memperbaiki pelanggaran tersebut dalam waktu [MASA_PERBAIKAN] hari setelah menerima pemberitahuan tertulis.\n\n2. Klien dapat mengakhiri perjanjian ini untuk kenyamanan dengan memberikan pemberitahuan tertulis minimal [MASA_PEMBERITAHUAN_PENGAKHIRAN] hari kepada Penyedia Jasa dan membayar biaya yang telah jatuh tempo untuk Jasa yang telah dilakukan serta biaya pembatalan sebesar [PERSENTASE_BIAYA_PEMBATALAN]% dari sisa Biaya Jasa yang belum dibayarkan.",
+        isRequired: true
+      },
+      {
+        id: "limitation-liability",
+        title: "Batasan Tanggung Jawab",
+        content: "1. Tanggung jawab Penyedia Jasa kepada Klien, atas alasan apa pun dan terlepas dari bentuk tindakan, akan terbatas pada jumlah total Biaya Jasa yang dibayarkan berdasarkan perjanjian ini.\n\n2. Tidak ada pihak yang bertanggung jawab atas kerugian konsekuensial, insidental, tidak langsung, khusus, atau hukuman apa pun.",
+        isRequired: false
+      },
+      {
+        id: "force-majeure",
+        title: "Keadaan Kahar",
+        content: "Tidak ada pihak yang bertanggung jawab atas keterlambatan atau kegagalan untuk melaksanakan kewajibannya berdasarkan perjanjian ini jika keterlambatan atau kegagalan tersebut disebabkan oleh keadaan di luar kendali wajar pihak tersebut, termasuk namun tidak terbatas pada bencana alam, tindakan pemerintah, terorisme, perang, kerusuhan sipil, kebakaran, ledakan, banjir, epidemi, atau perselisihan industri (\"Keadaan Kahar\").",
+        isRequired: false
+      },
+      {
+        id: "dispute-resolution",
+        title: "Penyelesaian Sengketa",
+        content: "Setiap perselisihan yang timbul dari atau sehubungan dengan perjanjian ini akan diselesaikan secara musyawarah untuk mufakat. Jika tidak tercapai kesepakatan dalam waktu [MASA_MUSYAWARAH] hari, maka perselisihan akan diselesaikan melalui [FORUM_PENYELESAIAN_SENGKETA].",
+        isRequired: true
+      },
+      {
+        id: "governing-law",
+        title: "Hukum yang Berlaku",
+        content: "Perjanjian ini diatur oleh dan ditafsirkan sesuai dengan hukum Republik Indonesia.",
+        isRequired: true
+      }
+    ],
+    placeholders: [
+      "TANGGAL", "NAMA_PENYEDIA", "BENTUK_BADAN_HUKUM", "ALAMAT_PENYEDIA", "NAMA_PERWAKILAN", "JABATAN", "NAMA_KLIEN", "ALAMAT_KLIEN", "NAMA_PERWAKILAN_KLIEN", "JABATAN_KLIEN", "DESKRIPSI_JASA_1", "DESKRIPSI_JASA_2", "DESKRIPSI_JASA_3", "DESKRIPSI_JASA_LAINNYA", "TANGGAL_EFEKTIF", "TANGGAL_BERAKHIR", "JUMLAH_BIAYA", "JADWAL_PEMBAYARAN_1", "JUMLAH_1", "JADWAL_PEMBAYARAN_2", "JUMLAH_2", "JADWAL_PEMBAYARAN_LAINNYA", "BANK_PENYEDIA", "NOMOR_REKENING_PENYEDIA", "NAMA_REKENING_PENYEDIA", "PERSENTASE_DENDA", "NAMA_MANAJER_PROYEK", "NAMA_PERWAKILAN_KLIEN_PROYEK", "MASA_KERAHASIAAN", "MASA_PERBAIKAN", "MASA_PEMBERITAHUAN_PENGAKHIRAN", "PERSENTASE_BIAYA_PEMBATALAN", "MASA_MUSYAWARAH", "FORUM_PENYELESAIAN_SENGKETA"
+    ]
+  },
+  {
+    id: "sales-agreement",
+    name: "Perjanjian Jual Beli",
+    description: "Perjanjian jual beli barang antara penjual dan pembeli",
+    category: "business",
+    clauses: [
+      {
+        id: "parties",
+        title: "Para Pihak",
+        content: "PERJANJIAN JUAL BELI ini dibuat pada [TANGGAL] oleh dan antara:\n\n1. [NAMA_PENJUAL], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PENJUAL], dalam hal ini diwakili oleh [NAMA_PERWAKILAN_PENJUAL] selaku [JABATAN_PENJUAL] (selanjutnya disebut sebagai \"Penjual\"); dan\n\n2. [NAMA_PEMBELI], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PEMBELI], dalam hal ini diwakili oleh [NAMA_PERWAKILAN_PEMBELI] selaku [JABATAN_PEMBELI] (selanjutnya disebut sebagai \"Pembeli\").\n\nPenjual dan Pembeli selanjutnya secara bersama-sama disebut sebagai \"Para Pihak\".",
+        isRequired: true
+      },
+      {
+        id: "goods",
+        title: "Barang",
+        content: "1. Penjual setuju untuk menjual dan Pembeli setuju untuk membeli barang-barang berikut (\"Barang\"):\n\n[DESKRIPSI_BARANG]\n\n2. Spesifikasi rinci Barang tercantum dalam Lampiran A yang merupakan bagian yang tidak terpisahkan dari perjanjian ini.",
+        isRequired: true
+      },
+      {
+        id: "price-payment",
+        title: "Harga dan Pembayaran",
+        content: "1. Harga pembelian Barang adalah sebesar Rp [HARGA_PEMBELIAN] (\"Harga Pembelian\"), belum termasuk pajak yang berlaku.\n\n2. Pembayaran akan dilakukan dengan jadwal sebagai berikut:\n   a. Uang muka sebesar Rp [JUMLAH_UANG_MUKA] (atau [PERSENTASE_UANG_MUKA]% dari Harga Pembelian) akan dibayarkan pada [TANGGAL_UANG_MUKA].\n   b. Sisa pembayaran sebesar Rp [JUMLAH_SISA_PEMBAYARAN] akan dibayarkan pada [TANGGAL_SISA_PEMBAYARAN].\n\n3. Pembayaran akan dilakukan melalui transfer bank ke rekening Penjual:\n   Nama Bank: [BANK_PENJUAL]\n   Nomor Rekening: [NOMOR_REKENING_PENJUAL]\n   Atas Nama: [NAMA_REKENING_PENJUAL]",
+        isRequired: true
+      },
+      {
+        id: "delivery",
+        title: "Pengiriman",
+        content: "1. Penjual akan mengirimkan Barang ke [ALAMAT_PENGIRIMAN] (\"Tempat Pengiriman\") pada atau sebelum [TANGGAL_PENGIRIMAN].\n\n2. Risiko kehilangan atau kerusakan Barang beralih ke Pembeli pada saat pengiriman ke Tempat Pengiriman.\n\n3. Kepemilikan Barang beralih ke Pembeli hanya setelah pembayaran penuh Harga Pembelian diterima oleh Penjual.",
+        isRequired: true
+      },
+      {
+        id: "inspection",
+        title: "Pemeriksaan dan Penerimaan",
+        content: "1. Pembeli berhak untuk memeriksa Barang pada saat pengiriman dan harus memberitahu Penjual secara tertulis tentang ketidaksesuaian apa pun dalam waktu [MASA_PEMERIKSAAN] hari setelah pengiriman.\n\n2. Jika Pembeli tidak memberikan pemberitahuan dalam periode tersebut, Barang akan dianggap telah diterima oleh Pembeli.",
+        isRequired: true
+      },
+      {
+        id: "warranties",
+        title: "Jaminan",
+        content: "1. Penjual menjamin bahwa:\n   a. Penjual memiliki hak untuk menjual Barang;\n   b. Barang sesuai dengan spesifikasi yang tercantum dalam Lampiran A; dan\n   c. Barang bebas dari cacat material dan pengerjaan untuk jangka waktu [MASA_GARANSI] bulan dari tanggal pengiriman.\n\n2. Jaminan ini tidak berlaku untuk kerusakan yang disebabkan oleh penggunaan yang tidak normal, modifikasi tanpa izin, atau kecelakaan.",
+        isRequired: true
+      },
+      {
+        id: "liability",
+        title: "Tanggung Jawab",
+        content: "1. Tanggung jawab maksimum Penjual kepada Pembeli untuk semua klaim berdasarkan perjanjian ini tidak akan melebihi Harga Pembelian Barang.\n\n2. Tidak ada pihak yang bertanggung jawab atas kerugian konsekuensial, insidental, tidak langsung, khusus, atau hukuman apa pun.",
+        isRequired: true
+      },
+      {
+        id: "termination",
+        title: "Pengakhiran Perjanjian",
+        content: "1. Salah satu pihak dapat mengakhiri perjanjian ini dengan memberikan pemberitahuan tertulis kepada pihak lain jika pihak lain melakukan pelanggaran material terhadap perjanjian ini dan tidak memperbaiki pelanggaran tersebut dalam waktu [MASA_PERBAIKAN] hari setelah menerima pemberitahuan tertulis.\n\n2. Jika Pembeli membatalkan pesanan sebelum pengiriman, Pembeli akan membayar biaya pembatalan sebesar [PERSENTASE_BIAYA_PEMBATALAN]% dari Harga Pembelian.",
+        isRequired: true
+      },
+      {
+        id: "force-majeure",
+        title: "Keadaan Kahar",
+        content: "Tidak ada pihak yang bertanggung jawab atas keterlambatan atau kegagalan untuk melaksanakan kewajibannya berdasarkan perjanjian ini jika keterlambatan atau kegagalan tersebut disebabkan oleh keadaan di luar kendali wajar pihak tersebut, termasuk namun tidak terbatas pada bencana alam, tindakan pemerintah, terorisme, perang, kerusuhan sipil, kebakaran, ledakan, atau banjir (\"Keadaan Kahar\").",
+        isRequired: false
+      },
+      {
+        id: "confidentiality",
+        title: "Kerahasiaan",
+        content: "Para Pihak setuju untuk menjaga kerahasiaan syarat dan ketentuan perjanjian ini dan semua informasi rahasia yang diterima sehubungan dengan perjanjian ini selama jangka waktu perjanjian dan [MASA_KERAHASIAAN] tahun setelahnya.",
+        isRequired: false
+      },
+      {
+        id: "dispute-resolution",
+        title: "Penyelesaian Sengketa",
+        content: "Setiap perselisihan yang timbul dari atau sehubungan dengan perjanjian ini akan diselesaikan secara musyawarah untuk mufakat. Jika tidak tercapai kesepakatan dalam waktu [MASA_MUSYAWARAH] hari, maka perselisihan akan diselesaikan melalui [FORUM_PENYELESAIAN_SENGKETA].",
+        isRequired: true
+      },
+      {
+        id: "governing-law",
+        title: "Hukum yang Berlaku",
+        content: "Perjanjian ini diatur oleh dan ditafsirkan sesuai dengan hukum Republik Indonesia.",
+        isRequired: true
+      },
+      {
+        id: "entire-agreement",
+        title: "Keseluruhan Perjanjian",
+        content: "Perjanjian ini merupakan keseluruhan perjanjian antara Para Pihak terkait dengan pokok masalah perjanjian ini dan menggantikan semua perjanjian, pengertian, dan diskusi sebelumnya, baik lisan maupun tertulis.",
+        isRequired: true
+      }
+    ],
+    placeholders: [
+      "TANGGAL", "NAMA_PENJUAL", "BENTUK_BADAN_HUKUM", "ALAMAT_PENJUAL", "NAMA_PERWAKILAN_PENJUAL", "JABATAN_PENJUAL", "NAMA_PEMBELI", "ALAMAT_PEMBELI", "NAMA_PERWAKILAN_PEMBELI", "JABATAN_PEMBELI", "DESKRIPSI_BARANG", "HARGA_PEMBELIAN", "JUMLAH_UANG_MUKA", "PERSENTASE_UANG_MUKA", "TANGGAL_UANG_MUKA", "JUMLAH_SISA_PEMBAYARAN", "TANGGAL_SISA_PEMBAYARAN", "BANK_PENJUAL", "NOMOR_REKENING_PENJUAL", "NAMA_REKENING_PENJUAL", "ALAMAT_PENGIRIMAN", "TANGGAL_PENGIRIMAN", "MASA_PEMERIKSAAN", "MASA_GARANSI", "MASA_PERBAIKAN", "PERSENTASE_BIAYA_PEMBATALAN", "MASA_KERAHASIAAN", "MASA_MUSYAWARAH", "FORUM_PENYELESAIAN_SENGKETA"
+    ]
+  },
+  {
+    id: "nda",
+    name: "Perjanjian Kerahasiaan (NDA)",
+    description: "Perjanjian kerahasiaan untuk melindungi informasi rahasia",
+    category: "legal",
+    clauses: [
+      {
+        id: "parties",
+        title: "Para Pihak",
+        content: "PERJANJIAN KERAHASIAAN ini dibuat pada [TANGGAL] oleh dan antara:\n\n1. [NAMA_PIHAK_1], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PIHAK_1], dalam hal ini diwakili oleh [NAMA_PERWAKILAN_1] selaku [JABATAN_1] (selanjutnya disebut sebagai \"Pihak Pertama\"); dan\n\n2. [NAMA_PIHAK_2], [BENTUK_BADAN_HUKUM] yang didirikan berdasarkan hukum Republik Indonesia, berkedudukan di [ALAMAT_PIHAK_2], dalam hal ini diwakili oleh [NAMA_PERWAKILAN_2] selaku [JABATAN_2] (selanjutnya disebut sebagai \"Pihak Kedua\").\n\nPihak Pertama dan Pihak Kedua selanjutnya secara bersama-sama disebut sebagai \"Para Pihak\" dan secara individual sebagai \"Pihak\".",
+        isRequired: true
+      },
+      {
+        id: "purpose",
+        title: "Tujuan",
+        content: "Para Pihak bermaksud untuk mengungkapkan informasi rahasia tertentu sehubungan dengan [TUJUAN_PENGUNGKAPAN] (\"Tujuan\").",
+        isRequired: true
+      },
+      {
+        id: "confidential-info",
+        title: "Informasi Rahasia",
+        content: "1. \"Informasi Rahasia\" berarti semua informasi yang diungkapkan oleh Pihak pengungkap (\"Pengungkap\") kepada Pihak penerima (\"Penerima\"), baik secara lisan, tertulis, elektronik, atau bentuk lainnya, yang ditandai sebagai \"rahasia\" atau \"hak milik\" atau yang seharusnya secara wajar dipahami sebagai rahasia, termasuk namun tidak terbatas pada:\n   a. Informasi bisnis, keuangan, dan teknis;\n   b. Rahasia dagang dan pengetahuan;\n   c. Perangkat lunak, produk, dan spesifikasi produk;\n   d. Rencana pemasaran dan bisnis;\n   e. Aktivitas, pelanggan, dan pemasok; dan\n   f. [INFORMASI_RAHASIA_LAINNYA].\n\n2. Informasi Rahasia tidak termasuk informasi yang:\n   a. Sudah diketahui oleh Penerima sebelum pengungkapan oleh Pengungkap;\n   b. Tersedia untuk umum atau menjadi tersedia untuk umum tanpa pelanggaran oleh Penerima;\n   c. Diterima secara sah oleh Penerima dari pihak ketiga tanpa pembatasan; atau\n   d. Dikembangkan secara independen oleh Penerima tanpa menggunakan Informasi Rahasia.",
+        isRequired: true
+      },
+      {
+        id: "obligations",
+        title: "Kewajiban Kerahasiaan",
+        content: "1. Penerima setuju untuk:\n   a. Menjaga kerahasiaan semua Informasi Rahasia;\n   b. Menggunakan Informasi Rahasia hanya untuk Tujuan;\n   c. Tidak mengungkapkan Informasi Rahasia kepada pihak ketiga mana pun tanpa persetujuan tertulis sebelumnya dari Pengungkap;\n   d. Membatasi akses internal ke Informasi Rahasia hanya kepada karyawan, direktur, dan penasihat yang memiliki kebutuhan untuk mengetahui dan yang terikat oleh kewajiban kerahasiaan yang setidaknya sama ketatnya dengan yang terdapat dalam perjanjian ini;\n   e. Melindungi Informasi Rahasia dengan standar kehati-hatian yang sama dengan yang digunakan untuk melindungi informasi rahasianya sendiri, tetapi tidak kurang dari kehati-hatian yang wajar; dan\n   f. Memberitahu Pengungkap segera setelah mengetahui adanya pengungkapan Informasi Rahasia yang tidak sah.\n\n2. Jika Penerima diwajibkan oleh undang-undang, peraturan, atau proses hukum untuk mengungkapkan Informasi Rahasia, Penerima akan:\n   a. Memberikan pemberitahuan tertulis segera kepada Pengungkap;\n   b. Bekerja sama dengan Pengungkap dalam upaya untuk membatasi atau mencegah pengungkapan; dan\n   c. Membatasi pengungkapan hanya pada yang diperlukan secara hukum.",
+        isRequired: true
+      },
+      {
+        id: "term",
+        title: "Jangka Waktu",
+        content: "1. Perjanjian ini berlaku efektif sejak tanggal yang disebutkan di atas dan akan tetap berlaku selama [JANGKA_WAKTU] tahun.\n\n2. Kewajiban kerahasiaan dalam perjanjian ini akan tetap berlaku selama [MASA_KERAHASIAAN] tahun setelah pengakhiran atau berakhirnya perjanjian ini.",
+        isRequired: true
+      },
+      {
+        id: "return-destruction",
+        title: "Pengembalian atau Pemusnahan",
+        content: "Dalam waktu [MASA_PENGEMBALIAN] hari setelah permintaan tertulis dari Pengungkap atau setelah pengakhiran perjanjian ini, Penerima akan, atas pilihan Pengungkap, mengembalikan semua Informasi Rahasia kepada Pengungkap atau menghancurkan semua Informasi Rahasia dan memberikan sertifikat kehancuran yang ditandatangani oleh pejabat Penerima.",
+        isRequired: true
+      },
+      {
+        id: "no-rights",
+        title: "Tidak Ada Pemberian Hak",
+        content: "1. Semua Informasi Rahasia tetap menjadi hak milik Pengungkap.\n\n2. Perjanjian ini tidak memberikan hak atau lisensi apa pun kepada Penerima terkait dengan Informasi Rahasia.",
+        isRequired: true
+      },
+      {
+        id: "no-warranty",
+        title: "Tidak Ada Jaminan",
+        content: "Informasi Rahasia disediakan \"sebagaimana adanya\". Pengungkap tidak membuat jaminan apa pun, tersurat maupun tersirat, mengenai keakuratan atau kelengkapan Informasi Rahasia.",
+        isRequired: false
+      },
+      {
+        id: "remedies",
+        title: "Upaya Hukum",
+        content: "Penerima mengakui bahwa kerusakan moneter mungkin tidak cukup untuk memperbaiki pelanggaran perjanjian ini dan bahwa Pengungkap berhak untuk mencari ganti rugi yang adil, termasuk perintah pengadilan, tanpa membatasi upaya lain yang tersedia bagi Pengungkap berdasarkan hukum atau keadilan.",
+        isRequired: true
+      },
+      {
+        id: "no-obligation",
+        title: "Tidak Ada Kewajiban Lebih Lanjut",
+        content: "Perjanjian ini tidak mewajibkan salah satu Pihak untuk mengungkapkan Informasi Rahasia apa pun, atau untuk menjalin hubungan bisnis apa pun dengan Pihak lain.",
+        isRequired: false
+      },
+      {
+        id: "assignment",
+        title: "Pengalihan",
+        content: "Penerima tidak dapat mengalihkan atau mentransfer hak atau kewajiban apa pun berdasarkan perjanjian ini tanpa persetujuan tertulis sebelumnya dari Pengungkap.",
+        isRequired: true
+      },
+      {
+        id: "dispute-resolution",
+        title: "Penyelesaian Sengketa",
+        content: "Setiap perselisihan yang timbul dari atau sehubungan dengan perjanjian ini akan diselesaikan secara musyawarah untuk mufakat. Jika tidak tercapai kesepakatan dalam waktu [MASA_MUSYAWARAH] hari, maka perselisihan akan diselesaikan melalui [FORUM_PENYELESAIAN_SENGKETA].",
+        isRequired: true
+      },
+      {
+        id: "governing-law",
+        title: "Hukum yang Berlaku",
+        content: "Perjanjian ini diatur oleh dan ditafsirkan sesuai dengan hukum Republik Indonesia.",
+        isRequired: true
+      },
+      {
+        id: "entire-agreement",
+        title: "Keseluruhan Perjanjian",
+        content: "Perjanjian ini merupakan keseluruhan perjanjian antara Para Pihak terkait dengan pokok masalah perjanjian ini dan menggantikan semua perjanjian, pengertian, dan diskusi sebelumnya, baik lisan maupun tertulis.",
+        isRequired: true
+      }
+    ],
+    placeholders: [
+      "TANGGAL", "NAMA_PIHAK_1", "BENTUK_BADAN_HUKUM", "ALAMAT_PIHAK_1", "NAMA_PERWAKILAN_1", "JABATAN_1", "NAMA_PIHAK_2", "ALAMAT_PIHAK_2", "NAMA_PERWAKILAN_2", "JABATAN_2", "TUJUAN_PENGUNGKAPAN", "INFORMASI_RAHASIA_LAINNYA", "JANGKA_WAKTU", "MASA_KERAHASIAAN", "MASA_PENGEMBALIAN", "MASA_MUSYAWARAH", "FORUM_PENYELESAIAN_SENGKETA"
+    ]
+  }
+];
+
+// Main Component
+export default function ContractGenerator() {
+  const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
+  const [selectedClauses, setSelectedClauses] = useState<string[]>([]);
+  const [generatedContract, setGeneratedContract] = useState<string>("");
+  const [placeholderValues, setPlaceholderValues] = useState<{[key: string]: string}>({});
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [step, setStep] = useState<number>(1);
+  const [contractTitle, setContractTitle] = useState<string>("");
+  const [isGeneratingWithAI, setIsGeneratingWithAI] = useState<boolean>(false);
+  const [aiContractType, setAiContractType] = useState<string>("");
+  const [aiContractDetails, setAiContractDetails] = useState<string>("");
+  const [aiParty1, setAiParty1] = useState<string>("");
+  const [aiParty2, setAiParty2] = useState<string>("");
+  const [aiAdditionalClauses, setAiAdditionalClauses] = useState<string>("");
+  const [aiSpecificRequirements, setAiSpecificRequirements] = useState<string>("");
+  const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
+  const { toast } = useToast();
+  
+  // Filter templates based on search query
+  const filteredTemplates = contractTemplates.filter(template => 
+    template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    template.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  
+  // Template categories for filtering
+  const templateCategories = Array.from(new Set(contractTemplates.map(t => t.category)));
+  
+  // Select template handler
+  const handleSelectTemplate = (template: ContractTemplate) => {
+    setSelectedTemplate(template);
+    // Set all required clauses as selected by default
+    const requiredClauses = template.clauses
+      .filter(clause => clause.isRequired)
+      .map(clause => clause.id);
+    setSelectedClauses(requiredClauses);
+    setStep(2);
+  };
+  
+  // Toggle clause selection handler
+  const handleToggleClause = (clauseId: string) => {
+    if (selectedTemplate) {
+      const clause = selectedTemplate.clauses.find(c => c.id === clauseId);
+      
+      // If clause is required, it cannot be deselected
+      if (clause?.isRequired) {
+        return;
+      }
+      
+      if (selectedClauses.includes(clauseId)) {
+        setSelectedClauses(prev => prev.filter(id => id !== clauseId));
+      } else {
+        setSelectedClauses(prev => [...prev, clauseId]);
+      }
+    }
+  };
+  
+  // Update placeholder value handler
+  const handleUpdatePlaceholder = (key: string, value: string) => {
+    setPlaceholderValues(prev => ({ ...prev, [key]: value }));
+  };
+  
+  // Fill all placeholders with sample data (for testing)
+  const fillWithSampleData = () => {
+    if (!selectedTemplate) return;
+    
+    const sampleValues: {[key: string]: string} = {};
+    selectedTemplate.placeholders.forEach(placeholder => {
+      // Generate sample value based on placeholder name
+      let sampleValue = "";
+      if (placeholder.includes("NAMA")) {
+        sampleValue = "PT Example Indonesia";
+      } else if (placeholder.includes("ALAMAT")) {
+        sampleValue = "Jl. Contoh No. 123, Jakarta";
+      } else if (placeholder.includes("TANGGAL")) {
+        sampleValue = new Date().toLocaleDateString("id-ID");
+      } else if (placeholder.includes("JABATAN")) {
+        sampleValue = "Direktur";
+      } else if (placeholder.includes("JUMLAH") || placeholder.includes("BIAYA") || placeholder.includes("HARGA")) {
+        sampleValue = "1.000.000";
+      } else if (placeholder.includes("PERSENTASE")) {
+        sampleValue = "10";
+      } else if (placeholder.includes("MASA") || placeholder.includes("JANGKA")) {
+        sampleValue = "3";
+      } else {
+        sampleValue = `[Contoh ${placeholder}]`;
+      }
+      
+      sampleValues[placeholder] = sampleValue;
+    });
+    
+    setPlaceholderValues(sampleValues);
+    
+    toast({
+      title: "Data Contoh Diterapkan",
+      description: "Semua placeholder telah diisi dengan data contoh.",
+    });
+  };
+  
+  // Clear all placeholder values
+  const clearPlaceholderValues = () => {
+    setPlaceholderValues({});
+    
+    toast({
+      title: "Data Dihapus",
+      description: "Semua nilai placeholder telah dihapus.",
+    });
+  };
+  
+  // Generate contract from selected template and clauses
+  const generateContract = () => {
+    if (!selectedTemplate) return;
+    
+    // Validate if all placeholders are filled
+    const missingPlaceholders = selectedTemplate.placeholders.filter(placeholder => 
+      !placeholderValues[placeholder] || placeholderValues[placeholder].trim() === ""
+    );
+    
+    if (missingPlaceholders.length > 0) {
+      toast({
+        title: "Informasi Belum Lengkap",
+        description: `Mohon lengkapi semua placeholder yang diperlukan (${missingPlaceholders.length} belum diisi)`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Build the contract with header
+    let contractContent = `${contractTitle || selectedTemplate.name.toUpperCase()}\n\n`;
+    
+    // Add selected clauses in order
+    selectedTemplate.clauses
+      .filter(clause => selectedClauses.includes(clause.id))
+      .forEach((clause, index) => {
+        contractContent += `${clause.title.toUpperCase()}\n\n`;
+        
+        // Replace all placeholders in the clause content
+        let clauseContent = clause.content;
+        selectedTemplate.placeholders.forEach(placeholder => {
+          const regex = new RegExp(`\\[${placeholder}\\]`, "g");
+          clauseContent = clauseContent.replace(regex, placeholderValues[placeholder] || `[${placeholder}]`);
+        });
+        
+        contractContent += `${clauseContent}\n\n`;
+      });
+    
+    // Add signature section
+    contractContent += `DEMIKIAN PERJANJIAN INI DIBUAT DENGAN SEBENARNYA DALAM RANGKAP DUA, MASING-MASING MEMPUNYAI KEKUATAN HUKUM YANG SAMA.\n\n`;
+    
+    // Extract party names from placeholders if available
+    const party1 = placeholderValues["NAMA_PIHAK_1"] || placeholderValues["NAMA_PERUSAHAAN"] || placeholderValues["NAMA_PENJUAL"] || placeholderValues["NAMA_PEMILIK"] || placeholderValues["NAMA_PENYEDIA"] || "Pihak Pertama";
+    const party2 = placeholderValues["NAMA_PIHAK_2"] || placeholderValues["NAMA_KARYAWAN"] || placeholderValues["NAMA_PEMBELI"] || placeholderValues["NAMA_PENYEWA"] || placeholderValues["NAMA_KLIEN"] || "Pihak Kedua";
+    
+    contractContent += `${party1},\n\n\n\n_______________________\n`;
+    contractContent += `${placeholderValues["NAMA_PERWAKILAN"] || placeholderValues["NAMA_PERWAKILAN_1"] || placeholderValues["NAMA_PERWAKILAN_PENJUAL"] || ""}\n`;
+    contractContent += `${placeholderValues["JABATAN"] || placeholderValues["JABATAN_1"] || placeholderValues["JABATAN_PENJUAL"] || ""}\n\n\n`;
+    
+    contractContent += `${party2},\n\n\n\n_______________________\n`;
+    contractContent += `${placeholderValues["NAMA_PERWAKILAN_KLIEN"] || placeholderValues["NAMA_PERWAKILAN_2"] || placeholderValues["NAMA_PERWAKILAN_PEMBELI"] || ""}\n`;
+    contractContent += `${placeholderValues["JABATAN_KLIEN"] || placeholderValues["JABATAN_2"] || placeholderValues["JABATAN_PEMBELI"] || ""}\n`;
+    
+    setGeneratedContract(contractContent);
+    setStep(4);
+    
+    toast({
+      title: "Kontrak Berhasil Dibuat",
+      description: "Dokumen kontrak telah dibuat berdasarkan pilihan Anda.",
+    });
+  };
+  
+  // Copy contract to clipboard
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(generatedContract);
+    toast({
+      title: "Disalin!",
+      description: "Dokumen kontrak telah disalin ke clipboard.",
+    });
+  };
+  
+  // Download contract as PDF
+  const downloadAsPdf = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Set title
+      const title = contractTitle || selectedTemplate?.name || "Kontrak";
+      
+      // Split text into lines that fit within the PDF
+      const splitText = doc.splitTextToSize(generatedContract, 180);
+      
+      // Set font size and add text
+      doc.setFontSize(12);
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, 105, 20, { align: 'center' });
+      
+      // Reset font for content
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      
+      // Add content with proper spacing
+      doc.text(splitText, 15, 40);
+      
+      // Save the PDF
+      doc.save(`${title.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+      
+      toast({
+        title: "Dokumen PDF Diunduh",
+        description: "Kontrak telah diunduh dalam format PDF.",
+      });
+    } catch (error) {
+      toast({
+        title: "Gagal Mengunduh PDF",
+        description: "Terjadi kesalahan saat mengunduh dokumen PDF.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Reset form
+  const resetForm = () => {
+    setSelectedTemplate(null);
+    setSelectedClauses([]);
+    setGeneratedContract("");
+    setPlaceholderValues({});
+    setContractTitle("");
+    setStep(1);
+    
+    toast({
+      title: "Form Direset",
+      description: "Semua pilihan telah dikosongkan.",
+    });
+  };
+  
+  // Group placeholders by keywords to make form more organized
+  const groupPlaceholders = (placeholders: string[]) => {
+    const groups: {[key: string]: string[]} = {
+      "Umum": [],
+      "Pihak Pertama": [],
+      "Pihak Kedua": [],
+      "Tanggal": [],
+      "Finansial": [],
+      "Jangka Waktu": [],
+      "Lainnya": []
+    };
+    
+    placeholders.forEach(placeholder => {
+      if (placeholder.includes("TANGGAL")) {
+        groups["Tanggal"].push(placeholder);
+      } else if (placeholder.includes("PIHAK_1") || placeholder.includes("PERUSAHAAN") || placeholder.includes("PENJUAL") || placeholder.includes("PEMILIK") || placeholder.includes("PENYEDIA")) {
+        groups["Pihak Pertama"].push(placeholder);
+      } else if (placeholder.includes("PIHAK_2") || placeholder.includes("KARYAWAN") || placeholder.includes("PEMBELI") || placeholder.includes("PENYEWA") || placeholder.includes("KLIEN")) {
+        groups["Pihak Kedua"].push(placeholder);
+      } else if (placeholder.includes("JUMLAH") || placeholder.includes("BIAYA") || placeholder.includes("HARGA") || placeholder.includes("GAJI") || placeholder.includes("PERSENTASE")) {
+        groups["Finansial"].push(placeholder);
+      } else if (placeholder.includes("MASA") || placeholder.includes("JANGKA") || placeholder.includes("WAKTU")) {
+        groups["Jangka Waktu"].push(placeholder);
+      } else {
+        groups["Lainnya"].push(placeholder);
+      }
+    });
+    
+    // Filter out empty groups
+    return Object.fromEntries(Object.entries(groups).filter(([_, values]) => values.length > 0));
+  };
+  
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 mt-16 dark:bg-slate-900">
+      <Breadcrumb 
+        items={[
+          { label: "Tools", path: "/tools" },
+          { label: "Contract Generator", path: "/tools/contract-generator", isActive: true }
+        ]} 
+      />
+      
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-50 mb-2">
+          <FileText className="inline-block mr-2 text-blue-600" />
+          Contract Generator
+        </h1>
+        <p className="text-gray-600 dark:text-slate-300 max-w-3xl mx-auto">
+          Tool gratis untuk membuat kontrak dan perjanjian dengan mudah dan cepat.
+          Pilih template, sesuaikan klausa, dan hasilkan dokumen siap pakai.
+        </p>
+      </div>
+      
+      {/* Stepper */}
+      <div className="flex justify-center mb-8">
+        <div className="relative flex items-center w-full max-w-3xl">
+          {[1, 2, 3, 4].map((stepNumber) => (
+            <React.Fragment key={stepNumber}>
+              <div className="relative flex flex-col items-center">
+                <div 
+                  className={`w-10 h-10 rounded-full flex items-center justify-center 
+                  ${step >= stepNumber ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300'}`}
+                >
+                  {step > stepNumber ? <CheckCheck className="h-5 w-5" /> : stepNumber}
+                </div>
+                <div className="mt-2 text-center w-32">
+                  <span className={`text-sm font-medium ${step >= stepNumber ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {stepNumber === 1 && "Pilih Template"}
+                    {stepNumber === 2 && "Pilih Klausa"}
+                    {stepNumber === 3 && "Isi Detail"}
+                    {stepNumber === 4 && "Hasil Kontrak"}
+                  </span>
+                </div>
+              </div>
+              {stepNumber < 4 && (
+                <div 
+                  className={`flex-1 h-0.5 ${step > stepNumber ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                ></div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      
+      {/* Step 1: Template Selection */}
+      {step === 1 && (
+        <div>
+          {/* Tabs for selection method */}
+          <Tabs defaultValue="manual" className="mb-6" onValueChange={(value) => setIsGeneratingWithAI(value === "ai")}>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="manual">
+                <FileText className="w-4 h-4 mr-2" />
+                Template Manual
+              </TabsTrigger>
+              <TabsTrigger value="ai">
+                <Wand2 className="w-4 h-4 mr-2" />
+                Buat dengan AI
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="manual">
+              <div className="mb-6">
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                  <div className="flex-grow">
+                    <Label htmlFor="searchQuery" className="mb-2 block">Cari Template</Label>
+                    <div className="relative">
+                      <Input
+                        id="searchQuery"
+                        placeholder="Cari berdasarkan nama, deskripsi, atau kategori..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    </div>
+                  </div>
+                
+                  <div className="w-full md:w-48">
+                    <Label htmlFor="categoryFilter" className="mb-2 block">Kategori</Label>
+                    <Select onValueChange={(value) => setSearchQuery(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Semua kategori" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Semua kategori</SelectItem>
+                        {templateCategories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category === "employment" && "Ketenagakerjaan"}
+                            {category === "property" && "Properti"}
+                            {category === "business" && "Bisnis"}
+                            {category === "legal" && "Hukum"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {filteredTemplates.map((template) => (
+                  <Card 
+                    key={template.id} 
+                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => handleSelectTemplate(template)}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <FileText className="mr-2 h-5 w-5 text-blue-500" />
+                        {template.name}
+                      </CardTitle>
+                      <CardDescription>{template.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Badge className="mb-2">
+                        {template.category === "employment" && "Ketenagakerjaan"}
+                        {template.category === "property" && "Properti"}
+                        {template.category === "business" && "Bisnis"}
+                        {template.category === "legal" && "Hukum"}
+                      </Badge>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {template.clauses.length} klausa tersedia
+                      </p>
+                    </CardContent>
+                    <CardFooter className="border-t pt-4 flex justify-between">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          
+                          // Find the DialogTrigger element instead of using native dialog API
+                          const dialogTrigger = document.getElementById(`dialog-${template.id}`);
+                          if (dialogTrigger) {
+                            dialogTrigger.click();
+                          }
+                        }}
+                      >
+                        <HelpCircle className="h-4 w-4 mr-2" />
+                        Detail
+                      </Button>
+                      <Button size="sm">
+                        Pilih Template
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+                
+                {filteredTemplates.length === 0 && (
+                  <div className="col-span-3 text-center p-8">
+                    <AlertCircle className="mx-auto h-10 w-10 text-gray-400" />
+                    <p className="mt-2 text-lg font-medium">Template tidak ditemukan</p>
+                    <p className="mt-1 text-gray-500 dark:text-gray-400">Coba kata kunci lain atau reset pencarian</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="ai">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Wand2 className="mr-2 h-5 w-5 text-purple-500" />
+                    Buat Kontrak dengan AI
+                  </CardTitle>
+                  <CardDescription>
+                    Masukkan informasi kontrak dan biarkan AI membuatkan dokumen legal untuk Anda
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="aiContractType">Jenis Kontrak</Label>
+                      <Select 
+                        value={aiContractType} 
+                        onValueChange={setAiContractType}
+                      >
+                        <SelectTrigger id="aiContractType">
+                          <SelectValue placeholder="Pilih jenis kontrak" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="employment">Perjanjian Kerja</SelectItem>
+                          <SelectItem value="rental">Perjanjian Sewa</SelectItem>
+                          <SelectItem value="service">Perjanjian Jasa</SelectItem>
+                          <SelectItem value="sale">Perjanjian Jual Beli</SelectItem>
+                          <SelectItem value="nda">Perjanjian Kerahasiaan (NDA)</SelectItem>
+                          <SelectItem value="loan">Perjanjian Pinjaman</SelectItem>
+                          <SelectItem value="partnership">Perjanjian Kemitraan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="aiContractDetails">Detail Kontrak</Label>
+                      <Textarea 
+                        id="aiContractDetails"
+                        placeholder="Jelaskan rincian utama kontrak, termasuk tujuan, jangka waktu, nilai, dan informasi penting lainnya"
+                        value={aiContractDetails}
+                        onChange={(e) => setAiContractDetails(e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="aiParty1">Informasi Pihak Pertama</Label>
+                        <Textarea 
+                          id="aiParty1"
+                          placeholder="Nama, alamat, dan detail pihak pertama"
+                          value={aiParty1}
+                          onChange={(e) => setAiParty1(e.target.value)}
+                          rows={3}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="aiParty2">Informasi Pihak Kedua</Label>
+                        <Textarea 
+                          id="aiParty2"
+                          placeholder="Nama, alamat, dan detail pihak kedua"
+                          value={aiParty2}
+                          onChange={(e) => setAiParty2(e.target.value)}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="aiAdditionalClauses">Klausa Tambahan (Opsional)</Label>
+                      <Textarea 
+                        id="aiAdditionalClauses"
+                        placeholder="Klausa khusus atau tambahan yang ingin disertakan"
+                        value={aiAdditionalClauses}
+                        onChange={(e) => setAiAdditionalClauses(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="aiSpecificRequirements">Persyaratan Khusus (Opsional)</Label>
+                      <Textarea 
+                        id="aiSpecificRequirements"
+                        placeholder="Persyaratan atau instruksi khusus untuk kontrak ini"
+                        value={aiSpecificRequirements}
+                        onChange={(e) => setAiSpecificRequirements(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button 
+                    className="w-full"
+                    disabled={!aiContractType || !aiContractDetails || !aiParty1 || !aiParty2 || isAiGenerating}
+                    onClick={async () => {
+                      try {
+                        setIsAiGenerating(true);
+                        
+                        const result = await generateContract({
+                          contractType: aiContractType,
+                          details: aiContractDetails,
+                          party1: aiParty1,
+                          party2: aiParty2,
+                          additionalClauses: aiAdditionalClauses,
+                          specificRequirements: aiSpecificRequirements
+                        });
+                        
+                        if (result && result.content) {
+                          setGeneratedContract(result.content);
+                          setStep(4);
+                          toast({
+                            title: "Kontrak Berhasil Dibuat",
+                            description: "Kontrak telah dibuat menggunakan AI sesuai dengan informasi yang Anda berikan.",
+                          });
+                        } else {
+                          toast({
+                            title: "Gagal Membuat Kontrak",
+                            description: "Terjadi kesalahan saat membuat kontrak. Silakan coba lagi.",
+                            variant: "destructive",
+                          });
+                        }
+                      } catch (error) {
+                        console.error("Error generating contract:", error);
+                        toast({
+                          title: "Gagal Membuat Kontrak",
+                          description: "Terjadi kesalahan saat membuat kontrak. Silakan coba lagi.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsAiGenerating(false);
+                      }
+                    }}
+                  >
+                    {isAiGenerating ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Sedang Membuat Kontrak...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="mr-2 h-5 w-5" />
+                        Buat Kontrak dengan AI
+                      </>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+          </Tabs>
+          
+          {/* Template preview dialogs */}
+          {contractTemplates.map((template) => (
+            <Dialog key={template.id}>
+              <DialogTrigger id={`dialog-${template.id}`} className="hidden">
+                Preview
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>{template.name}</DialogTitle>
+                  <DialogDescription>{template.description}</DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  <h3 className="font-medium mb-2">Klausa dalam template ini:</h3>
+                  <Accordion type="multiple" className="w-full">
+                    {template.clauses.map((clause) => (
+                      <AccordionItem key={clause.id} value={clause.id}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center">
+                            {clause.title}
+                            {clause.isRequired && (
+                              <Badge variant="secondary" className="ml-2">Wajib</Badge>
+                            )}
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <p className="whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                            {clause.content}
+                          </p>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => handleSelectTemplate(template)}>
+                    Gunakan Template Ini
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ))}
+            
+            {filteredTemplates.length === 0 && (
+              <div className="col-span-3 text-center p-8">
+                <AlertCircle className="mx-auto h-10 w-10 text-gray-400" />
+                <p className="mt-2 text-lg font-medium">Template tidak ditemukan</p>
+                <p className="mt-1 text-gray-500 dark:text-gray-400">Coba kata kunci lain atau reset pencarian</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Template preview dialogs */}
+          {contractTemplates.map((template) => (
+            <Dialog key={template.id}>
+              <DialogTrigger id={`dialog-${template.id}`} className="hidden">
+                Preview
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>{template.name}</DialogTitle>
+                  <DialogDescription>{template.description}</DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  <h3 className="font-medium mb-2">Klausa dalam template ini:</h3>
+                  <Accordion type="multiple" className="w-full">
+                    {template.clauses.map((clause) => (
+                      <AccordionItem key={clause.id} value={clause.id}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center">
+                            {clause.title}
+                            {clause.isRequired && (
+                              <Badge variant="secondary" className="ml-2">Wajib</Badge>
+                            )}
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <p className="whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                            {clause.content}
+                          </p>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => handleSelectTemplate(template)}>
+                    Gunakan Template Ini
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ))}
+        </div>
+      )}
+      
+      {/* Step 2: Clause Selection */}
+      {step === 2 && selectedTemplate && (
+        <div>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <FileText className="mr-2 h-5 w-5 text-blue-500" />
+                {selectedTemplate.name}
+              </CardTitle>
+              <CardDescription>{selectedTemplate.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Label htmlFor="contractTitle">Judul Kontrak (Opsional)</Label>
+                <Input
+                  id="contractTitle"
+                  placeholder="Contoh: PERJANJIAN KERJA SAMA ANTARA PT XYZ DAN PT ABC"
+                  value={contractTitle}
+                  onChange={(e) => setContractTitle(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div className="mb-4">
+                <h3 className="text-lg font-medium">Pilih Klausa yang Akan Dimasukkan</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Klausa dengan tanda <Badge variant="secondary" className="ml-1">Wajib</Badge> tidak dapat dihapus dari kontrak
+                </p>
+                
+                <div className="space-y-4">
+                  {selectedTemplate.clauses.map((clause) => (
+                    <div 
+                      key={clause.id}
+                      className={`p-4 border rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
+                        ${selectedClauses.includes(clause.id) ? 'border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'}`}
+                    >
+                      <div className="flex items-start">
+                        <div className="flex items-center h-5 mt-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedClauses.includes(clause.id)}
+                            onChange={() => handleToggleClause(clause.id)}
+                            disabled={clause.isRequired}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                          />
+                        </div>
+                        <div className="ml-3">
+                          <div className="flex items-center">
+                            <span className="font-medium">{clause.title}</span>
+                            {clause.isRequired && (
+                              <Badge variant="secondary" className="ml-2">Wajib</Badge>
+                            )}
+                          </div>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs">
+                                  Lihat isi
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="max-w-lg">
+                                <p className="whitespace-pre-line text-sm">
+                                  {clause.content.length > 300 
+                                    ? clause.content.substring(0, 300) + "..." 
+                                    : clause.content}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col sm:flex-row justify-between space-y-2 sm:space-y-0">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSelectedTemplate(null);
+                  setSelectedClauses([]);
+                  setStep(1);
+                }}
+              >
+                <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                Kembali
+              </Button>
+              <Button 
+                onClick={() => setStep(3)}
+                disabled={selectedClauses.length === 0}
+              >
+                Lanjutkan
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+      
+      {/* Step 3: Fill Placeholders */}
+      {step === 3 && selectedTemplate && (
+        <div>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Lengkapi Informasi Kontrak</CardTitle>
+              <CardDescription>
+                Isi semua bidang berikut untuk menggantikan placeholder dalam template kontrak
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                <Button variant="outline" size="sm" onClick={fillWithSampleData}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Isi dengan Data Contoh
+                </Button>
+                <Button variant="outline" size="sm" onClick={clearPlaceholderValues}>
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                  Reset Semua Nilai
+                </Button>
+              </div>
+              
+              <Tabs defaultValue="form" className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="form">Form</TabsTrigger>
+                  <TabsTrigger value="table">Tabel</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="form">
+                  {Object.entries(groupPlaceholders(selectedTemplate.placeholders)).map(([groupName, placeholders]) => (
+                    <div key={groupName} className="mb-6">
+                      <h3 className="text-lg font-medium mb-4">{groupName}</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {placeholders.map((placeholder) => (
+                          <div key={placeholder} className="space-y-2">
+                            <Label htmlFor={placeholder}>
+                              {placeholder.replace(/_/g, " ")}
+                            </Label>
+                            <Input
+                              id={placeholder}
+                              placeholder={`Masukkan ${placeholder.toLowerCase().replace(/_/g, " ")}`}
+                              value={placeholderValues[placeholder] || ""}
+                              onChange={(e) => handleUpdatePlaceholder(placeholder, e.target.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </TabsContent>
+                
+                <TabsContent value="table">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-1/3">Placeholder</TableHead>
+                          <TableHead className="w-2/3">Nilai</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedTemplate.placeholders.map((placeholder) => (
+                          <TableRow key={placeholder}>
+                            <TableCell className="font-medium">
+                              {placeholder.replace(/_/g, " ")}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                placeholder={`Masukkan ${placeholder.toLowerCase().replace(/_/g, " ")}`}
+                                value={placeholderValues[placeholder] || ""}
+                                onChange={(e) => handleUpdatePlaceholder(placeholder, e.target.value)}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+            <CardFooter className="flex flex-col sm:flex-row justify-between space-y-2 sm:space-y-0">
+              <Button 
+                variant="outline" 
+                onClick={() => setStep(2)}
+              >
+                <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                Kembali
+              </Button>
+              <Button 
+                onClick={generateContract}
+              >
+                Generate Kontrak
+                <FileText className="ml-2 h-4 w-4" />
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+      
+      {/* Step 4: Generated Contract */}
+      {step === 4 && generatedContract && (
+        <div>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Kontrak yang Dihasilkan</CardTitle>
+              <CardDescription>
+                Berikut adalah kontrak yang telah dihasilkan berdasarkan template dan informasi yang Anda berikan
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-gray-50 dark:bg-gray-800 p-5 rounded-md">
+                <pre className="whitespace-pre-wrap text-sm font-mono overflow-auto max-h-[60vh] text-gray-800 dark:text-gray-200">
+                  {generatedContract}
+                </pre>
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-wrap justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setStep(3)}
+                >
+                  <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                  Edit Lagi
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetForm}
+                >
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                  Buat Baru
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={copyToClipboard}
+                >
+                  <ClipboardCopy className="h-4 w-4 mr-2" />
+                  Salin Teks
+                </Button>
+                <Button
+                  onClick={downloadAsPdf}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Unduh PDF
+                </Button>
+              </div>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+      
+      {/* Information Section */}
+      <div className="mt-8">
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-4 dark:text-slate-50">Tentang Contract Generator</h2>
+            <div className="text-gray-700 dark:text-slate-300 space-y-3">
+              <p>
+                <strong>Apa itu Contract Generator?</strong> Contract Generator adalah tool yang membantu pengguna untuk membuat kontrak dan perjanjian hukum dengan cepat dan mudah berdasarkan template yang telah disiapkan.
+              </p>
+              <p>
+                <strong>Cara Penggunaan:</strong>
+              </p>
+              <ol className="list-decimal pl-5 space-y-1">
+                <li>Pilih template kontrak yang sesuai dengan kebutuhan Anda</li>
+                <li>Sesuaikan klausa-klausa yang ingin disertakan dalam kontrak</li>
+                <li>Isi informasi yang diperlukan untuk melengkapi dokumen</li>
+                <li>Hasilkan dokumen kontrak dan unduh atau salin sesuai kebutuhan</li>
+              </ol>
+              <p>
+                <strong>Catatan Penting:</strong> Tool ini dimaksudkan sebagai bantuan untuk membuat draft kontrak dan tidak menggantikan nasihat hukum profesional. Kami menyarankan agar dokumen yang dihasilkan diperiksa oleh ahli hukum sebelum ditandatangani dan digunakan.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

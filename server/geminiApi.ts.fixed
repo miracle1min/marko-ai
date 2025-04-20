@@ -1,0 +1,326 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Store the API key directly here as requested
+const GEMINI_API_KEY = "AIzaSyCcIbEEtr5S1IMchbiaGWRBWMZjgOOeA5s";
+
+export async function geminiChatCompletion(
+  message: string,
+  modelName: string = "gemini-flash-2.0",
+  temperature: number = 0.7,
+  contexts: { seo: boolean; keyword: boolean; content: boolean } = { seo: false, keyword: false, content: true }
+): Promise<string> {
+  try {
+    // Map model names to actual Gemini model IDs
+    const modelMap: Record<string, string> = {
+      "gemini-flash-2.0": "gemini-2.0-flash", // Updated to the newest model version
+      "gemini-pro": "gemini-1.5-pro",
+      "gpt-4": "gemini-1.5-pro" // Fallback to Gemini Pro if GPT-4 is requested
+    };
+
+    const actualModelName = modelMap[modelName] || "gemini-2.0-flash";
+    
+    // Initialize the API with the API key
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // For the model
+    const model = genAI.getGenerativeModel({ model: actualModelName });
+
+    // Build context instructions based on selected contexts
+    let contextInstructions = "Anda adalah Marko AI, asisten AI yang membantu pengguna dengan optimasi website dan konten digital. ";
+    
+    if (contexts.seo) {
+      contextInstructions += "Fokus pada memberikan saran SEO yang efektif dan teknik optimasi on-page. ";
+    }
+    
+    if (contexts.keyword) {
+      contextInstructions += "Bantu dengan penelitian dan analisis kata kunci yang komprehensif. ";
+    }
+    
+    if (contexts.content) {
+      contextInstructions += "Buat konten berkualitas tinggi yang ramah dan dioptimasi untuk mesin pencari. ";
+    }
+    
+    contextInstructions += "Berikan jawaban dalam Bahasa Indonesia yang jelas dan mudah dipahami.";
+
+    // Generate content
+    const result = await model.generateContent({
+      contents: [{ 
+        role: "user", 
+        parts: [{ text: `${contextInstructions}\n\nPesan pengguna: ${message}` }]
+      }],
+      generationConfig: {
+        temperature: temperature,
+      }
+    });
+
+    const response = result.response;
+    return response.text();
+  } catch (error: any) {
+    console.error("Error generating content with Gemini API:", error);
+    throw new Error(`Failed to generate content: ${error.message}`);
+  }
+}
+
+// Function for generating articles
+export async function generateArticle(
+  title: string,
+  language: string = "id",
+  writingStyle: string = "formal",
+  wordCount: number = 500,
+  keywords: string[] = [],
+  additionalInstructions: string = ""
+): Promise<string> {
+  try {
+    // Initialize the API with the API key
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // Use the Gemini 2.0 Flash model for article generation
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // Build prompt for article generation
+    const langText = language === "id" ? "Bahasa Indonesia" : "English";
+    const prompt = `
+    Tuliskan sebuah artikel dengan judul "${title}".
+    
+    Informasi tambahan:
+    - Bahasa: ${langText}
+    - Gaya penulisan: ${writingStyle}
+    - Target jumlah kata: ${wordCount}
+    - Kata kunci yang perlu disertakan: ${keywords.join(", ")}
+    ${additionalInstructions ? `- Instruksi tambahan: ${additionalInstructions}` : ""}
+    
+    Buatlah artikel yang informatif, terstruktur dengan baik, dan sesuai dengan SEO. 
+    Sertakan paragraf pembuka, bagian utama dengan beberapa subjudul, dan kesimpulan.
+    `;
+
+    // Generate the article
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+      }
+    });
+
+    const response = result.response;
+    return response.text();
+  } catch (error: any) {
+    console.error("Error generating article:", error);
+    throw new Error(`Failed to generate article: ${error.message}`);
+  }
+}
+
+// Function for generating code
+export async function generateCode(
+  language: string,
+  codeType: string,
+  framework: string,
+  description: string,
+  functionName?: string,
+  parameters?: string,
+  includeComments: boolean = true,
+  includeExamples: boolean = true,
+  includeTests: boolean = false
+): Promise<{code: string}> {
+  try {
+    // Initialize the API with the API key
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // Use the Gemini 2.0 Flash model for code generation
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // Build prompt for code generation
+    const prompt = `
+    Hasilkan kode dalam bahasa pemrograman ${language} dengan deskripsi: "${description}"
+    
+    Detail tambahan:
+    - Jenis kode: ${codeType}
+    - Framework/Library: ${framework !== "none" ? framework : "Tidak ada (standard library)"}
+    - Nama fungsi/class: ${functionName || "Gunakan nama yang sesuai dengan deskripsi"}
+    - Parameter: ${parameters || "Sesuaikan dengan kebutuhan fungsi"}
+    - Sertakan komentar/dokumentasi: ${includeComments ? "Ya" : "Tidak"}
+    - Sertakan contoh penggunaan: ${includeExamples ? "Ya" : "Tidak"}
+    - Sertakan unit test: ${includeTests ? "Ya" : "Tidak"}
+    
+    Hasilkan kode yang efisien, mudah dibaca, dan mengikuti best practice untuk bahasa ${language}.
+    Jangan sertakan penjelasan, hanya kode yang bisa langsung dijalankan.
+    `;
+
+    // Generate the code
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2, // Lower temperature for more consistent code
+      }
+    });
+
+    const response = result.response;
+    return { code: response.text() };
+  } catch (error: any) {
+    console.error("Error generating code:", error);
+    throw new Error(`Failed to generate code: ${error.message}`);
+  }
+}
+
+// Function for health consultation
+export async function healthConsultation(
+  message: string,
+  context?: {
+    previousSymptoms?: string[];
+    medicalHistory?: string[];
+    age?: number;
+    gender?: string;
+  }
+): Promise<{ response: string }> {
+  try {
+    // Initialize the API with the API key
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // Use the Gemini 2.0 Flash model for health consultation
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // Build context information if available
+    let contextInfo = "";
+    if (context) {
+      contextInfo = "Informasi tambahan pasien:\n";
+      
+      if (context.age) {
+        contextInfo += `- Usia: ${context.age} tahun\n`;
+      }
+      
+      if (context.gender) {
+        contextInfo += `- Jenis kelamin: ${context.gender}\n`;
+      }
+      
+      if (context.previousSymptoms && context.previousSymptoms.length > 0) {
+        contextInfo += `- Gejala sebelumnya: ${context.previousSymptoms.join(", ")}\n`;
+      }
+      
+      if (context.medicalHistory && context.medicalHistory.length > 0) {
+        contextInfo += `- Riwayat kesehatan: ${context.medicalHistory.join(", ")}\n`;
+      }
+    }
+
+    // Build prompt for health consultation
+    const prompt = `
+    Anda adalah asisten dokter AI yang memberikan informasi kesehatan umum. Anda bukan dokter sungguhan dan tidak memberikan diagnosis medis.
+    
+    Selalu jelaskan bahwa Anda hanya memberikan informasi kesehatan umum dan pasien harus berkonsultasi dengan tenaga medis profesional untuk mendapatkan diagnosis dan perawatan yang tepat.
+    
+    ${contextInfo}
+    
+    Pertanyaan/keluhan pasien: ${message}
+    
+    Berikan informasi kesehatan yang akurat, mudah dipahami, dan bermanfaat dalam Bahasa Indonesia. Sertakan langkah-langkah yang dapat diambil dan kapan pasien harus mencari bantuan medis jika diperlukan.
+    `;
+
+    // Generate the response
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+      }
+    });
+
+    const response = result.response;
+    return { response: response.text() };
+  } catch (error: any) {
+    console.error("Error in health consultation:", error);
+    throw new Error(`Failed to get health consultation: ${error.message}`);
+  }
+}
+
+// Function for analyzing symptoms
+export async function analyzeSymptoms(
+  symptoms: {[key: string]: number},
+  age: string,
+  gender: string,
+  duration: string,
+  medicalHistory: string[] = [],
+  additionalNotes?: string
+): Promise<{
+  analysisText: string;
+  possibleConditions: Array<{name: string; probability: number; description: string}>;
+  recommendations: string[];
+}> {
+  try {
+    // Initialize the API with the API key
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // Use the Gemini 2.0 Flash model for symptom analysis
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // Convert symptoms object to formatted string
+    const symptomsText = Object.entries(symptoms)
+      .map(([symptom, severity]) => `- ${symptom.replace(/_/g, " ")} (tingkat keparahan: ${severity}/10)`)
+      .join("\n");
+
+    // Build prompt for symptom analysis
+    const prompt = `
+    Anda adalah asisten dokter AI yang memberikan analisis awal gejala pasien. Anda bukan dokter sungguhan dan tidak memberikan diagnosis medis resmi.
+    
+    Analisis gejala berikut dan berikan informasi edukasi kesehatan, kemungkinan kondisi (dengan persentase probabilitas), dan rekomendasi.
+    
+    Informasi Pasien:
+    - Usia: ${age}
+    - Jenis kelamin: ${gender}
+    - Durasi gejala: ${duration}
+    - Riwayat kesehatan: ${medicalHistory.length > 0 ? medicalHistory.join(", ") : "Tidak ada"}
+    ${additionalNotes ? `- Catatan tambahan: ${additionalNotes}` : ""}
+    
+    Gejala yang dialami:
+    ${symptomsText}
+    
+    Berikan respons dalam format JSON dengan struktur berikut (tanpa tanda backtick atau markdown):
+    
+    {
+      "analysisText": "Teks analisis umum...",
+      "possibleConditions": [
+        {"name": "Nama Kondisi 1", "probability": 85, "description": "Deskripsi kondisi..."},
+        {"name": "Nama Kondisi 2", "probability": 65, "description": "Deskripsi kondisi..."}
+      ],
+      "recommendations": ["Rekomendasi 1", "Rekomendasi 2", "Rekomendasi 3"]
+    }
+    `;
+
+    // Generate the analysis
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+      }
+    });
+
+    let responseText = result.response.text();
+    
+    try {
+      // Hapus markdown code blocks jika ada
+      responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      
+      // Parse JSON response
+      const parsedResponse = JSON.parse(responseText);
+      return {
+        analysisText: parsedResponse.analysisText || "Maaf, tidak dapat melakukan analisis berdasarkan informasi yang diberikan.",
+        possibleConditions: parsedResponse.possibleConditions || [],
+        recommendations: parsedResponse.recommendations || []
+      };
+    } catch (parseError) {
+      console.error("Error parsing symptom analysis response:", parseError);
+      console.error("Raw response:", responseText);
+      
+      // If JSON parsing fails, try to extract information manually
+      // (fallback in case AI doesn't format properly as JSON)
+      return {
+        analysisText: "Terjadi kesalahan dalam memformat hasil analisis. Silakan coba lagi.",
+        possibleConditions: [],
+        recommendations: [
+          "Konsultasikan dengan dokter jika gejala berlanjut",
+          "Catat perkembangan gejala Anda",
+          "Istirahat yang cukup dan minum banyak air"
+        ]
+      };
+    }
+  } catch (error: any) {
+    console.error("Error analyzing symptoms:", error);
+    throw new Error(`Failed to analyze symptoms: ${error.message}`);
+  }
+}

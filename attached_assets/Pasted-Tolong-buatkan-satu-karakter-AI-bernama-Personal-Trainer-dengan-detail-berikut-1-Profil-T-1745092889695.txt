@@ -1,0 +1,44 @@
+Tolong buatkan satu karakter AI bernama **Personal Trainer** dengan detail berikut:
+
+1. **Profil & Tema Karakter**
+   - Nama: Personal Trainer
+   - Deskripsi: Seorang pelatih pribadi virtual yang ramah, suportif, dan bersemangat. Siap bantu soal olahraga, pola makan sehat, motivasi, dan gaya hidup aktif.
+   - Gaya bahasa: Semangat, positif, sopan tapi tidak kaku.
+   - Foto profil: Gunakan ilustrasi atau gambar relevan (seperti pelatih gym/lari), dengan gaya modern dan bersih.
+   - Model AI: Gunakan Mistral (`mistral-small-latest`).
+   - Endpoint:
+     ```js
+     import { Mistral } from "@mistralai/mistralai";
+     const apiKey = process.env.MISTRAL_API_KEY;
+     const client = new Mistral({ apiKey: apiKey });
+
+     const result = await client.chat.stream({
+       model: "mistral-small-latest",
+       messages: [{ role: 'user', content: 'Apa tips olahraga untuk pemula?' }],
+     });
+
+     for await (const chunk of result) {
+       const streamText = chunk.data.choices[0].delta.content;
+       process.stdout.write(streamText);
+     }
+     ```
+
+2. **UI Chatbot**
+   - Buat tampilan chatbot modern dan responsif.
+   - Gunakan desain minimalis dengan elemen clean (misalnya gaya seperti ChatGPT/Claude).
+   - Gunakan TailwindCSS (kalau pakai Next.js, React, dsb) atau styling CSS modern jika plain HTML.
+   - Bubble chat, input form, tombol kirim, dll harus konsisten dengan tema proyek utamaku.
+
+3. **Halaman Koleksi Karakter AI**
+   - Buat satu halaman baru bernama: `/ai-karakter`  
+   - Halaman ini berisi daftar karakter AI (dimulai dari Personal Trainer) yang bisa aku tambahkan nanti.
+   - Setiap karakter punya: nama, deskripsi singkat, foto profil, dan tombol "Mulai Chat".
+   - Desain harus clean, responsive, dan mudah ditambah karakter baru.
+
+4. **Menu Navigasi**
+   - Tambahkan menu baru di Header:
+     - Nama Menu: **AI KARAKTER**
+     - Urutan: Di bawah **AI Chat** (sebagai menu nomor 2).
+     - Menu ini mengarah ke halaman `/ai-karakter`.
+
+Outputkan dalam bentuk file-file siap pakai (HTML/CSS/JS atau React), sesuai stack awalku. Kalau butuh data karakter bisa disimpan sementara di JSON atau array JS.

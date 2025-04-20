@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 95%;
+
+    --card: 223 47% 14%;
+    --card-foreground: 210 40% 95%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 95%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 25% 75%;
+
+    --accent: 217 32% 17%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 32% 17%;
+    --input: 217 32% 17%;
+    --ring: 224 76% 48%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .tool-card {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+  
+  .feature-card {
+    @apply transition-all duration-300 hover:scale-105;
+  }
+  
+  /* Meningkatkan keterbacaan teks di mode gelap */
+  .dark h1 {
+    @apply text-slate-50 font-semibold tracking-wide;
+  }
+  
+  .dark h2, .dark h3, .dark h4 {
+    @apply text-slate-100 tracking-wide;
+  }
+  
+  .dark p {
+    @apply text-slate-200 leading-relaxed;
+  }
+  
+  .dark a:not(.btn) {
+    @apply text-blue-400 hover:text-blue-300 transition-colors duration-200;
+  }
+  
+  .dark label {
+    @apply text-slate-200;
+  }
+  
+  .dark .text-muted {
+    @apply text-slate-400;
+  }
+  
+  .dark .card {
+    @apply shadow-lg border border-slate-700;
+  }
+  
+  /* Memastikan teks dan latar belakang card lebih mudah dibaca di mode gelap */
+  .dark [data-radix-popper-content-wrapper] {
+    @apply bg-slate-900 text-slate-200;
+  }
+  
+  /* Styling untuk semua kartu dalam mode gelap */
+  .dark .p-4:has(p, button) {
+    @apply bg-slate-800 !important;
+  }
+  
+  .dark p.text-gray-600 {
+    @apply text-slate-300 !important;
+  }
+  
+  .dark button[class*="variant-ghost"] {
+    @apply text-slate-200 hover:bg-slate-700 !important;
+  }
+  
+  /* Styling untuk kategori kartu dalam mode gelap */
+  .dark .bg-gray-100 {
+    @apply bg-slate-800 text-slate-200;
+  }
+  
+  /* Tab styling dalam mode gelap */
+  .dark [data-radix-collection-item][data-state="active"] {
+    @apply text-white bg-slate-800;
+  }
+  
+  .dark [data-radix-collection-item]:not([data-state="active"]) {
+    @apply text-slate-400 hover:text-slate-200;
+  }
+  
+  .animate-shimmer {
+    animation: shimmer 1.5s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(200%);
+    }
+  }
+  
+  .animate-fade-in, .animate-fadeIn {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-slide-in {
+    animation: slideIn 0.5s ease-out;
+  }
+  
+  @keyframes slideIn {
+    0% {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}
